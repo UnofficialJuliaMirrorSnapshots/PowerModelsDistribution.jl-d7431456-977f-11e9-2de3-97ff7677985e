@@ -30,33 +30,6 @@ function _get_linecode(dss_data::Dict, id::AbstractString)
 end
 
 
-"creates a starbus from a 3-winding transformer"
-function _create_starbus(pmd_data::Dict, transformer::Dict)::Dict
-    starbus = Dict{String,Any}()
-
-    base = convert(Int, 10^ceil(log10(abs(_PMs.find_max_bus_id(pmd_data)))))
-    name, nodes = _parse_busname(transformer["buses"][1])
-    nconductors = pmd_data["conductors"]
-    starbus_id = _find_bus(name, pmd_data) + base
-
-    starbus["bus_i"] = starbus_id
-    starbus["base_kv"] = 1.0
-    starbus["vmin"] = _PMs.MultiConductorVector(_parse_array(0.9, nodes, nconductors, 0.9))
-    starbus["vmax"] = _PMs.MultiConductorVector(_parse_array(1.1, nodes, nconductors, 1.1))
-    starbus["name"] = "$(transformer["name"]) starbus"
-    starbus["vm"] = _PMs.MultiConductorVector(_parse_array(1.0, nodes, nconductors))
-    starbus["va"] = _PMs.MultiConductorVector(_parse_array(0.0, nodes, nconductors))
-    starbus["bus_type"] = 1
-    starbus["index"] = starbus_id
-
-    nodes = .+([_parse_busname(transformer["buses"][n])[2] for n in length(transformer["buses"])]...)
-    starbus["active_phases"] = [n for n in 1:nconductors if nodes[n] > 0]
-    starbus["source_id"] = "transformer.$(transformer["name"])"
-
-    return starbus
-end
-
-
 """
     _discover_buses(dss_data)
 
@@ -131,7 +104,6 @@ function _dss2pmd_bus!(pmd_data::Dict, dss_data::Dict, import_all::Bool=false, v
     end
 
     # create virtual sourcebus
-
     circuit = _create_vsource(get(dss_data["circuit"][1], "bus1", "sourcebus"), dss_data["circuit"][1]["name"]; _to_sym_keys(dss_data["circuit"][1])...)
 
     busDict = Dict{String,Any}()
@@ -161,12 +133,12 @@ end
 
 
 """
-    _find_component(pmd_data, name, compType)
+    find_component(pmd_data, name, compType)
 
 Returns the component of `compType` with `name` from `data` of type
 Dict{String,Array}.
 """
-function _find_component(data::Dict, name::AbstractString, compType::AbstractString)::Dict
+function find_component(data::Dict, name::AbstractString, compType::AbstractString)::Dict
     for comp in values(data[compType])
         if comp["name"] == name
             return comp
@@ -178,12 +150,12 @@ end
 
 
 """
-    _find_bus(busname, pmd_data)
+    find_bus(busname, pmd_data)
 
 Finds the index number of the bus in existing data from the given `busname`.
 """
-function _find_bus(busname::AbstractString, pmd_data::Dict)
-    bus = _find_component(pmd_data, busname, "bus")
+function find_bus(busname::AbstractString, pmd_data::Dict)
+    bus = find_component(pmd_data, busname, "bus")
     if haskey(bus, "bus_i")
         return bus["bus_i"]
     else
@@ -219,7 +191,7 @@ function _dss2pmd_load!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         end
 
         loadDict["name"] = defaults["name"]
-        loadDict["load_bus"] = _find_bus(name, pmd_data)
+        loadDict["load_bus"] = find_bus(name, pmd_data)
 
         load_name = defaults["name"]
 
@@ -380,7 +352,7 @@ function _dss2pmd_shunt!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         # now convent b_cap to per unit
         b_cap_pu = b_cap/Ybase_ln
 
-        shuntDict["shunt_bus"] = _find_bus(name, pmd_data)
+        shuntDict["shunt_bus"] = find_bus(name, pmd_data)
         shuntDict["name"] = defaults["name"]
         shuntDict["gs"] = _PMs.MultiConductorVector(_parse_array(0.0, nodes, nconductors))  # TODO:
         shuntDict["bs"] = _PMs.MultiConductorVector(_parse_array(b_cap_pu, nodes, nconductors))
@@ -410,7 +382,7 @@ function _dss2pmd_shunt!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
             Zbase = (pmd_data["basekv"] / sqrt(3.0))^2 * nconductors / pmd_data["baseMVA"]  # Use single-phase base impedance for each phase
             Gcap = Zbase * sum(defaults["kvar"]) / (nconductors * 1e3 * (pmd_data["basekv"] / sqrt(3.0))^2)
 
-            shuntDict["shunt_bus"] = _find_bus(name, pmd_data)
+            shuntDict["shunt_bus"] = find_bus(name, pmd_data)
             shuntDict["name"] = defaults["name"]
             shuntDict["gs"] = _PMs.MultiConductorVector(_parse_array(0.0, nodes, nconductors))  # TODO:
             shuntDict["bs"] = _PMs.MultiConductorVector(_parse_array(Gcap, nodes, nconductors))
@@ -448,7 +420,7 @@ function _dss2pmd_gen!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
     nconductors = pmd_data["conductors"]
     name, nodes = _parse_busname(defaults["bus1"])
 
-    genDict["gen_bus"] = _find_bus("virtual_sourcebus", pmd_data)
+    genDict["gen_bus"] = find_bus("virtual_sourcebus", pmd_data)
     genDict["name"] = defaults["name"]
     genDict["gen_status"] = convert(Int, defaults["enabled"])
 
@@ -488,7 +460,7 @@ function _dss2pmd_gen!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         nconductors = pmd_data["conductors"]
         name, nodes = _parse_busname(defaults["bus1"])
 
-        genDict["gen_bus"] = _find_bus(name, pmd_data)
+        genDict["gen_bus"] = find_bus(name, pmd_data)
         genDict["name"] = defaults["name"]
         genDict["gen_status"] = convert(Int, defaults["enabled"])
         genDict["pg"] = _PMs.MultiConductorVector(_parse_array(defaults["kw"] / (1e3 * nconductors), nodes, nconductors))
@@ -554,7 +526,7 @@ function _dss2pmd_gen!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         name, nodes = _parse_busname(defaults["bus1"])
 
         pvDict["name"] = defaults["name"]
-        pvDict["gen_bus"] = _find_bus(name, pmd_data)
+        pvDict["gen_bus"] = find_bus(name, pmd_data)
 
         pvDict["pg"] = _PMs.MultiConductorVector(_parse_array(defaults["kva"] / (1e3 * nconductors), nodes, nconductors))
         pvDict["qg"] = _PMs.MultiConductorVector(_parse_array(defaults["kva"] / (1e3 * nconductors), nodes, nconductors))
@@ -605,7 +577,7 @@ function _dss2pmd_branch!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         if haskey(line, "linecode")
             linecode = deepcopy(_get_linecode(dss_data, get(line, "linecode", "")))
             if haskey(linecode, "like")
-                linecode = merge(_find_component(dss_data, linecode["like"], "linecode"), linecode)
+                linecode = merge(find_component(dss_data, linecode["like"], "linecode"), linecode)
             end
 
             linecode["units"] = get(line, "units", "none") == "none" ? "none" : get(linecode, "units", "none")
@@ -637,8 +609,8 @@ function _dss2pmd_branch!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
 
         branchDict["name"] = defaults["name"]
 
-        branchDict["f_bus"] = _find_bus(bf, pmd_data)
-        branchDict["t_bus"] = _find_bus(bt, pmd_data)
+        branchDict["f_bus"] = find_bus(bf, pmd_data)
+        branchDict["t_bus"] = find_bus(bt, pmd_data)
 
         branchDict["length"] = defaults["length"]
 
@@ -747,7 +719,7 @@ function _dss2pmd_transformer!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
                 transDict["active_phases"] = [1, 2, 3]
                 Memento.warn(_LOGGER, "Only three-phase transformers are supported. The bus specification $bnstr is treated as $bus instead.")
             end
-            transDict["buses"][i] = _find_bus(bus, pmd_data)
+            transDict["buses"][i] = find_bus(bus, pmd_data)
         end
 
         # voltage and power ratings
@@ -941,8 +913,8 @@ function _dss2pmd_reactor!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
                 t_bus = _parse_busname(defaults["bus2"])[1]
 
                 reactDict["name"] = defaults["name"]
-                reactDict["f_bus"] = _find_bus(f_bus, pmd_data)
-                reactDict["t_bus"] = _find_bus(t_bus, pmd_data)
+                reactDict["f_bus"] = find_bus(f_bus, pmd_data)
+                reactDict["t_bus"] = find_bus(t_bus, pmd_data)
 
                 reactDict["br_r"] = _PMs.MultiConductorMatrix(_parse_matrix(diagm(0 => fill(0.2, nconductors)), nodes, nconductors))
                 reactDict["br_x"] = _PMs.MultiConductorMatrix(_parse_matrix(zeros(nconductors, nconductors), nodes, nconductors))
@@ -1006,7 +978,7 @@ function _dss2pmd_pvsystem!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         name, nodes = _parse_busname(defaults["bus1"])
 
         pvsystemDict["name"] = defaults["name"]
-        pvsystemDict["pv_bus"] = _find_bus(name, pmd_data)
+        pvsystemDict["pv_bus"] = find_bus(name, pmd_data)
         pvsystemDict["p"] = _PMs.MultiConductorVector(_parse_array(defaults["kw"] / 1e3, nodes, nconductors))
         pvsystemDict["q"] = _PMs.MultiConductorVector(_parse_array(defaults["kvar"] / 1e3, nodes, nconductors))
         pvsystemDict["status"] = convert(Int, defaults["enabled"])
@@ -1044,7 +1016,7 @@ function _dss2pmd_storage!(pmd_data::Dict, dss_data::Dict, import_all::Bool)
         name, nodes = _parse_busname(defaults["bus1"])
 
         storageDict["name"] = defaults["name"]
-        storageDict["storage_bus"] = _find_bus(name, pmd_data)
+        storageDict["storage_bus"] = find_bus(name, pmd_data)
         storageDict["energy"] = defaults["kwhstored"] / 1e3
         storageDict["energy_rating"] = defaults["kwhrated"] / 1e3
         storageDict["charge_rating"] = defaults["%charge"] * defaults["kwrated"] / 1e3 / 100.0
@@ -1089,7 +1061,7 @@ was adjusted to accomodate that.
 """
 function _adjust_sourcegen_bounds!(pmd_data)
     emergamps = Array{Float64,1}([0.0])
-    sourcebus_n = _find_bus(pmd_data["sourcebus"], pmd_data)
+    sourcebus_n = find_bus(pmd_data["sourcebus"], pmd_data)
     for (_,line) in pmd_data["branch"]
         if (line["f_bus"] == sourcebus_n || line["t_bus"] == sourcebus_n) && !startswith(line["source_id"], "virtual")
             append!(emergamps, get(line, "c_rating_b", get(line, "rate_b", missing)).values)
@@ -1616,8 +1588,8 @@ end
 
 "Creates a virtual branch between the `virtual_sourcebus` and `sourcebus` with the impedance given by `circuit`"
 function _create_sourcebus_vbranch!(pmd_data::Dict, circuit::Dict)
-    sourcebus = _find_bus(pmd_data["sourcebus"], pmd_data)
-    vsourcebus = _find_bus("virtual_sourcebus", pmd_data)
+    sourcebus = find_bus(pmd_data["sourcebus"], pmd_data)
+    vsourcebus = find_bus("virtual_sourcebus", pmd_data)
 
     br_r = _PMs.MultiConductorMatrix(circuit["rmatrix"])
     br_x = _PMs.MultiConductorMatrix(circuit["xmatrix"])

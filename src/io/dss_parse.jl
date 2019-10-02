@@ -268,16 +268,6 @@ end
 
 
 """
-    _get_prop_name(ctype, i)
-
-Returns the `i`th property name for a given component type `ctype`.
-"""
-function _get_prop_name(ctype::AbstractString, i::Int)::String
-    return _get_prop_name(ctype)[i]
-end
-
-
-"""
     _parse_matrix(dtype, data)
 
 Parses a OpenDSS style triangular matrix string `data` into a two dimensional
@@ -1042,7 +1032,7 @@ function _apply_like!(raw_dss, dss_data, comp_type)
             end
 
             if prop in links
-                linked_dss = _find_component(dss_data, raw_dss[prop], comp_type)
+                linked_dss = find_component(dss_data, raw_dss[prop], comp_type)
                 if isempty(linked_dss)
                     Memento.warn(_LOGGER, "$comp_type.$(raw_dss["name"]): $prop=$(raw_dss[prop]) cannot be found")
                 else

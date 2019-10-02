@@ -2,6 +2,14 @@ PowerModelsDistribution.jl Change Log
 ===================================
 
 ### staged
+- Adds `count_nodes` function to count the number of nodes in a parsed network (#183)
+- Exports `find_bus` and `find_component` functions for better user experience (#183)
+- Fixed `solution_bf!` for branch flow solution building (#182)
+- Refactored problem definitions to remove any explicit loops over conductors (#181)
+- Added data format documentation (#180)
+- Moved storage to main MLD and OPF problems (#179)
+- Refactor to remove dcline variables and constraints (#179)
+- Refactor to genericize `constraint_mc_power_balance` (#179)
 - Fix bug in OpenDSS circuit initialization (vsource) (#178)
 - Make current rating (c_rating_a|b|c) be the default on branches (breaking)
 - Fix bug in transformer `ref` extension where all refs were not built for all `nw` in multinetworks (#171)
